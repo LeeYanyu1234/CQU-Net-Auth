@@ -148,7 +148,7 @@ def create_and_install_opener(interface=None, source_address=None):
     urllib.request.install_opener(opener)
 
 
-def is_internet_connected(host="223.6.6.6", port=53, timeout=3, interface=None):
+def is_socket_connected(host="223.6.6.6", port=53, timeout=3, interface=None):
     """通过 socket 检查是否连接到互联网"""
     # 动态获取接口IP
     interface_ip = None
@@ -185,12 +185,10 @@ def is_http_connected(url="https://www.baidu.com", timeout=3, interface=None):
 
 def check_internet(method="socket", interface=None, **kwargs):
     """检查互联网连接状态"""
-    if method == "socket":
-        return is_internet_connected(interface=interface, **kwargs)
-    elif method == "http":
-        return is_http_connected(interface=interface, **kwargs)
-    else:
-        raise ValueError("method must be 'socket' or 'http'")
+    return (
+        is_socket_connected(interface=interface, **kwargs)
+        and is_http_connected(interface=interface, **kwargs)
+    )
 
 
 def drcom_message_parser(drcom_message):
@@ -303,16 +301,6 @@ def save_ip_to_file(file_path=r"D:\BaiduSyncdisk\IP share\Desktop IP.txt"):
 
 def get_ipv4_information():
     """获取当前ipv4网络信息（类型+地址）"""
-    # try:
-    #     # 通过 UDP socket 获取当前主机在局域网中的 IPv4 地址
-    #     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    #     s.connect(("8.8.8.8", 80))  # 不会真正发包，只是用来确定本机 IP
-    #     ip = s.getsockname()[0]
-    #     s.close()
-    #     ip = get_active_network() + " - " + ip
-    #     return ip
-    # except Exception as e:
-    #     logger.error(f"获取IP失败: {e}")
     addrs = psutil.net_if_addrs()
     result = {}
     for iface, addr_list in addrs.items():
