@@ -168,7 +168,26 @@ def is_http_connected(url="https://www.baidu.com", timeout=3, interface=None):
         return False
 
 
-def check_internet(method="socket", interface=None, **kwargs):
+# def is_http_connected(url="https://www.baidu.com", timeout=3, interface=None):
+#     """通过 http 检查是否连接到互联网"""
+#     create_and_install_opener(interface=interface)
+#     req = urllib.request.Request(url, method="HEAD")
+#     try:
+#         with urllib.request.urlopen(req, timeout=timeout) as response:
+#             # 打印/记录 response 关键信息
+#             logger.debug(f"HTTP response 对象: {response!r}")
+#             logger.debug(f"HTTP status: {getattr(response, 'status', None)}")
+#             logger.debug(f"HTTP code(getcode): {response.getcode()}")
+#             logger.debug(f"HTTP final_url(geturl): {response.geturl()}")
+#             logger.debug(f"HTTP headers:\n{response.headers}")
+
+#             return response.getcode() == 200
+#     except Exception as e:
+#         logger.debug(f"HTTP连接失败: {e}")
+#         return False
+
+
+def check_internet(method="http", interface=None, **kwargs):
     """检查互联网连接状态"""
     if method == "socket":
         return is_internet_connected(interface=interface, **kwargs)
@@ -176,6 +195,62 @@ def check_internet(method="socket", interface=None, **kwargs):
         return is_http_connected(interface=interface, **kwargs)
     else:
         raise ValueError("method must be 'socket' or 'http'")
+
+
+def get_local_ipv4_primary():
+    """获取本机当前主要IPv4（默认出口），失败返回 None"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("223.6.6.6", 53))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+        return None
+    except Exception:
+        return None
+
+
+def record_ip_to_file(file_path: str, *, uid: str | None = None, portal_ip: str | None = None):
+    """记录一次IP到本地文件：
+    - 最多保留10条
+    - 新记录写在最前面
+    - 超过10条的旧记录丢弃
+    """
+    if not file_path:
+        return
+
+    local_ip = get_local_ipv4_primary()
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    new_line = f"{ts}\tuid={uid or ''}\tlocal_ip={local_ip or ''}\tportal_ip={portal_ip or ''}\n"
+
+    try:
+        dir_name = os.path.dirname(file_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
+
+        # 读取旧内容（最多保留9条旧的，加上新的=10）
+        old_lines: list[str] = []
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                old_lines = f.readlines()
+        except FileNotFoundError:
+            old_lines = []
+
+        # 清理空行，避免文件里出现很多空记录
+        old_lines = [ln for ln in old_lines if ln.strip()]
+
+        # 新的放最前，截断到10条
+        merged = [new_line] + old_lines
+        merged = merged[:10]
+
+        # 覆盖写回
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.writelines(merged)
+
+        logger.info(f"已记录IP到文件(最多10条，最新在前): {file_path}")
+    except Exception as e:
+        logger.warning(f"记录IP失败: {e}")
 
 
 def drcom_message_parser(drcom_message):
@@ -293,6 +368,8 @@ def parse_args():
                         "https://www.baidu.com"), help="使用 HTTP 检查网络状态时访问的 URL, 仅在 --check_with_http 为 true 时有效")
     parser.add_argument("--interface", type=str,
                         default=os.getenv("INTERFACE", ""), help="指定使用的网络接口名称，如eth0、wlan0等")
+    parser.add_argument("--file_path", type=str,
+                        default=os.getenv("FILE_PATH", ""), help="记录IP到本地文件（可选）")
 
     args = parser.parse_args()
 
@@ -310,7 +387,7 @@ def parse_args():
         logger.error("Windows系统不支持指定网络接口")
         sys.exit(-1)
 
-    return args.account, args.password, args.term_type, args.interval, args.check_with_http, args.http_url, args.interface
+    return args.account, args.password, args.term_type, args.interval, args.check_with_http, args.http_url, args.interface,  args.file_path
 
 
 def main():
@@ -318,17 +395,22 @@ def main():
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
     signal.signal(signal.SIGINT, lambda signum, frame: sys.exit(0))
 
-    account, password, term_type, interval, check_with_http, http_url, interface = parse_args()
+    account, password, term_type, interval, check_with_http, http_url, interface, file_path = parse_args()
 
     if interface:
         logger.info(f"认证网络接口 {interface}")
 
+    if file_path:
+        logger.info(f"IP将记录到文件: {file_path}")
+
     logger.info(f"每{interval}秒检查一次网络状态, 如果掉线则重新认证, CTRL+C 停止程序")
 
-    check_method = "http" if check_with_http else "socket"
+    # check_method = "http" if check_with_http else "socket"
+    check_method = "http"
     check_params = {"url": http_url} if check_with_http else {}
 
     status = "init"  # init/auth/unauth/uncertain
+    startup_checked = False  # 只用于“启动时已认证”的一次性记录
     while True:
         # 如果是 auth 状态，则检查 Internet 连接, 绕过对认证服务器的访问
         if status == "auth" and check_internet(method=check_method, interface=interface, **check_params):
@@ -361,6 +443,10 @@ def main():
         if "uid" in auth_info:
             logger.debug(f"已认证 {auth_info['uid']}")
             status = "auth"
+            if (not startup_checked) and auth_info.get("uid") == account:
+                record_ip_to_file(file_path, uid=auth_info.get(
+                    "uid"), portal_ip=auth_info.get("v46ip"))
+                startup_checked = True
             continue
 
         # 执行认证
@@ -380,6 +466,8 @@ def main():
         else:
             status = "auth"
             logger.info(f"认证成功 {account}({term_type})")
+            record_ip_to_file(file_path, uid=account,
+                              portal_ip=auth_info.get("v46ip"))
 
 
 if __name__ == "__main__":
