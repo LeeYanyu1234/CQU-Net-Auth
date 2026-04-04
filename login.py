@@ -9,6 +9,9 @@ import logging
 import urllib.request
 import argparse
 import http.client
+import smtplib
+from email.mime.text import MIMEText
+from email.header import Header
 
 # 避免读取系统代理（如 Clash 残留 127.0.0.1 代理）导致认证请求失败
 urllib.request.getproxies = lambda: {}
@@ -256,6 +259,27 @@ def record_ip_to_file(file_path: str, *, uid: str | None = None, portal_ip: str 
         logger.warning(f"记录IP失败: {e}")
 
 
+
+def read_last_portal_ip_from_file(file_path: str) -> str | None:
+    if not file_path:
+        return None
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                match = re.search(r"portal_ip=([^\s]+)", line)
+                if match:
+                    value = match.group(1).strip()
+                    return value or None
+        return None
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        logger.warning(f"failed to read last portal_ip from file: {e}")
+        return None
+
 def drcom_message_parser(drcom_message):
     """将形如 `dr1004(...);` 或 `dr1002(...)` 的内容解析为 dict"""
     if isinstance(drcom_message, bytes):
@@ -338,6 +362,17 @@ def logout(account, ip, timeout=3, interface=None):
         return False
 
 
+
+def send_qq_mail(sender, auth_code, to_addr, subject, body, smtp_host="smtp.qq.com", smtp_port=465, timeout=10):
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["From"] = sender
+    msg["To"] = to_addr
+    msg["Subject"] = Header(subject, "utf-8")
+
+    with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=timeout) as server:
+        server.login(sender, auth_code)
+        server.sendmail(sender, [to_addr], msg.as_string())
+
 def set_logger(log_level: str):
     global logger
     if log_level and log_level.lower() == "debug":
@@ -353,6 +388,16 @@ def set_logger(log_level: str):
     logger.addHandler(ch)
 
 
+
+def get_env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
 def parse_args():
     global logger
     parser = argparse.ArgumentParser()
@@ -365,7 +410,7 @@ def parse_args():
     parser.add_argument("--log_level", type=str, default=os.getenv(
         "LOG_LEVEL", "info"), choices=["debug", "info"], help="日志级别")
     parser.add_argument("--interval", type=int,
-                        default=os.getenv("INTERVAL", 5), help="检查网络状态的间隔时间(秒)")
+                        default=get_env_int("INTERVAL", 5), help="检查网络状态的间隔时间(秒)")
     parser.add_argument("--check_with_http", action='store_true', default=os.getenv("CHECK_WITH_HTTP",
                         "False").lower() in ('true', 'yes', '1', 't', 'y'), help="使用 HTTP 连接的的结果检查网络状态，默认为 False")
     parser.add_argument("--http_url", type=str, default=os.getenv("HTTP_URL",
@@ -374,6 +419,17 @@ def parse_args():
                         default=os.getenv("INTERFACE", ""), help="指定使用的网络接口名称，如eth0、wlan0等")
     parser.add_argument("--file_path", type=str,
                         default=os.getenv("FILE_PATH", ""), help="记录IP到本地文件（可选）")
+
+    parser.add_argument("--mail_enable", action='store_true', default=os.getenv("MAIL_ENABLE",
+                        "False").lower() in ('true', 'yes', '1', 't', 'y'), help="Enable QQ mail notification on portal IP changes")
+    parser.add_argument("--mail_sender", type=str,
+                        default=os.getenv("MAIL_SENDER", ""), help="QQ mail sender address")
+    parser.add_argument("--mail_auth_code", type=str,
+                        default=os.getenv("MAIL_AUTH_CODE", ""), help="QQ SMTP auth code")
+    parser.add_argument("--mail_to", type=str,
+                        default=os.getenv("MAIL_TO", ""), help="Mail receiver address")
+    parser.add_argument("--mail_cooldown", type=int,
+                        default=get_env_int("MAIL_COOLDOWN", 300), help="Minimum seconds between notifications")
 
     args = parser.parse_args()
 
@@ -391,7 +447,25 @@ def parse_args():
         logger.error("Windows系统不支持指定网络接口")
         sys.exit(-1)
 
-    return args.account, args.password, args.term_type, args.interval, args.check_with_http, args.http_url, args.interface,  args.file_path
+    if args.mail_enable and (not args.mail_sender or not args.mail_auth_code or not args.mail_to):
+        logger.error("mail_enable is set, but mail_sender/mail_auth_code/mail_to is missing")
+        sys.exit(-1)
+
+    return (
+        args.account,
+        args.password,
+        args.term_type,
+        args.interval,
+        args.check_with_http,
+        args.http_url,
+        args.interface,
+        args.file_path,
+        args.mail_enable,
+        args.mail_sender,
+        args.mail_auth_code,
+        args.mail_to,
+        args.mail_cooldown,
+    )
 
 
 def main():
@@ -399,79 +473,119 @@ def main():
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
     signal.signal(signal.SIGINT, lambda signum, frame: sys.exit(0))
 
-    account, password, term_type, interval, check_with_http, http_url, interface, file_path = parse_args()
+    (
+        account,
+        password,
+        term_type,
+        interval,
+        check_with_http,
+        http_url,
+        interface,
+        file_path,
+        mail_enable,
+        mail_sender,
+        mail_auth_code,
+        mail_to,
+        mail_cooldown,
+    ) = parse_args()
 
     if interface:
-        logger.info(f"认证网络接口 {interface}")
+        logger.info(f"auth interface: {interface}")
 
     if file_path:
-        logger.info(f"IP将记录到文件: {file_path}")
+        logger.info(f"IP log file: {file_path}")
 
-    logger.info(f"每{interval}秒检查一次网络状态, 如果掉线则重新认证, CTRL+C 停止程序")
+    logger.info(f"check network every {interval}s, auto re-auth on disconnect, CTRL+C to stop")
 
-    # check_method = "http" if check_with_http else "socket"
-    check_method = "http"
+    check_method = "http" if check_with_http else "socket"
     check_params = {"url": http_url} if check_with_http else {}
 
     status = "init"  # init/auth/unauth/uncertain
-    startup_checked = False  # 只用于“启动时已认证”的一次性记录
+    startup_checked = False
+    last_portal_ip = read_last_portal_ip_from_file(file_path)
+    if last_portal_ip:
+        logger.info(f"loaded last portal IP from file: {last_portal_ip}")
+    last_mail_sent_at = 0.0
+
     while True:
-        # 如果是 auth 状态，则检查 Internet 连接, 绕过对认证服务器的访问
         if status == "auth" and check_internet(method=check_method, interface=interface, **check_params):
-            logger.debug(f"网络连接正常, {interval}秒后重新检查网络状态...")
+            logger.debug(f"network looks healthy, recheck in {interval}s")
             time.sleep(interval)
             continue
 
-        # 首先获取认证信息
         auth_info = get_auth_info(interface=interface)
         if not auth_info:
-            logger.warning(f"无法连接认证服务器")
-            ####################################
-            ###### 这里可以添加 DHCP 重播逻辑 ######
-            ####################################
+            logger.warning("cannot reach auth server")
             status = "uncertain"
+            time.sleep(interval)
             continue
 
-        # 如果当前已认证, 且 uid 与 account 不一致, 则先注销当前认证账户
         if "uid" in auth_info and auth_info["uid"] != account:
             if logout(auth_info["uid"], auth_info["v46ip"], interface=interface):
-                logger.info(f"已注销 {auth_info['uid']}")
+                logger.info(f"logged out previous account: {auth_info['uid']}")
                 status = "unauth"
                 continue
-            else:
-                logger.error(f"注销 {auth_info['uid']} 失败")
-                status = "uncertain"
-                continue
+            logger.error(f"failed to logout previous account: {auth_info['uid']}")
+            status = "uncertain"
+            time.sleep(interval)
+            continue
 
-        # 如果当前已认证, 且 uid 与 account 一致, 则不需要重新认证
         if "uid" in auth_info:
-            logger.debug(f"已认证 {auth_info['uid']}")
+            logger.debug(f"already authenticated: {auth_info['uid']}")
             status = "auth"
+            portal_ip = auth_info.get("v46ip")
+
+            if portal_ip and last_portal_ip and portal_ip != last_portal_ip:
+                now = time.time()
+                if mail_enable and (now - last_mail_sent_at >= mail_cooldown):
+                    subject = "CQU Portal IP Changed"
+                    body = (
+                        f"account: {account}\n"
+                        f"old_ip: {last_portal_ip}\n"
+                        f"new_ip: {portal_ip}\n"
+                        f"time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    )
+                    try:
+                        send_qq_mail(mail_sender, mail_auth_code, mail_to, subject, body)
+                        last_mail_sent_at = now
+                        logger.info(f"portal IP changed, mail sent: {last_portal_ip} -> {portal_ip}")
+                    except Exception as e:
+                        logger.warning(f"failed to send mail: {e}")
+
+            if portal_ip:
+                if portal_ip != last_portal_ip:
+                    record_ip_to_file(file_path, uid=auth_info.get("uid"), portal_ip=portal_ip)
+                last_portal_ip = portal_ip
+
             if (not startup_checked) and auth_info.get("uid") == account:
-                record_ip_to_file(file_path, uid=auth_info.get(
-                    "uid"), portal_ip=auth_info.get("v46ip"))
+                record_ip_to_file(file_path, uid=auth_info.get("uid"), portal_ip=portal_ip)
                 startup_checked = True
             continue
 
-        # 执行认证
-        result, msg = login(account, password, term_type,
-                            auth_info['v46ip'], interface=interface)
+        portal_ip = auth_info.get("v46ip")
+        if not portal_ip:
+            logger.warning("auth_info missing v46ip, skip this round")
+            time.sleep(interval)
+            continue
+
+        result, msg = login(account, password, term_type, portal_ip, interface=interface)
         if not result:
             status = "unauth"
-            if msg in ["账号不存在", "密码错误"]:
-                logger.error(f"认证失败 {account}({term_type}): {msg}")
+            if msg in ["\u8d26\u53f7\u4e0d\u5b58\u5728", "\u5bc6\u7801\u9519\u8bef"]:
+                logger.error(f"auth failed {account}({term_type}): {msg}")
                 sys.exit(-1)
-            elif "等待5分钟" in msg:
-                logger.warning(f"触发共享上网检测, 等待 5 分钟...")
+            elif "\u7b49\u5f855\u5206\u949f" in msg:
+                logger.warning("triggered sharing-network check, wait 5 minutes")
                 time.sleep(300)
-                logger.info("等待结束")
+                logger.info("wait finished")
             else:
-                logger.warning(f"认证失败 {account}({term_type}): {msg}")
+                logger.warning(f"auth failed {account}({term_type}): {msg}")
+                time.sleep(interval)
         else:
             status = "auth"
-            logger.info(f"认证成功 {account}({term_type})")
-            record_ip_to_file(file_path, uid=account,
-                              portal_ip=auth_info.get("v46ip"))
+            logger.info(f"auth success {account}({term_type})")
+            last_portal_ip = portal_ip
+            record_ip_to_file(file_path, uid=account, portal_ip=portal_ip)
 
 
 if __name__ == "__main__":
