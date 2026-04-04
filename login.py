@@ -10,6 +10,9 @@ import urllib.request
 import argparse
 import http.client
 
+# 避免读取系统代理（如 Clash 残留 127.0.0.1 代理）导致认证请求失败
+urllib.request.getproxies = lambda: {}
+
 logger = None
 MOBILE_AUTH_URL = "http://login.cqu.edu.cn:801/eportal/portal/login?callback=dr1005&login_method=1&user_account=%2C1%2C{account}&user_password={password}&wlan_user_ip={ip}&wlan_user_ipv6=&wlan_user_mac=000000000000&wlan_ac_ip=&wlan_ac_name=&term_ua=Mozilla%2F5.0%20(Linux%3B%20Android%208.0.0%3B%20SM-G955U%20Build%2FR16NW)%20AppleWebKit%2F537.36%20(KHTML%2C%20like%20Gecko)%20Chrome%2F144.0.0.0%20Mobile%20Safari%2F537.36%20Edg%2F144.0.0.0&term_type=2&jsVersion=4.2.2&terminal_type=2&lang=zh-cn&v=1176&lang=zh-cn"
 PC_AUTH_URL = "http://login.cqu.edu.cn:801/eportal/portal/login?callback=dr1004&login_method=1&user_account=%2C0%2C{account}&user_password={password}&wlan_user_ip={ip}&wlan_user_ipv6=&wlan_user_mac=000000000000&wlan_ac_ip=&wlan_ac_name=&term_ua=Mozilla%2F5.0%20(Windows%20NT%2010.0%3B%20Win64%3B%20x64)%20AppleWebKit%2F537.36%20(KHTML%2C%20like%20Gecko)%20Chrome%2F144.0.0.0%20Safari%2F537.36%20Edg%2F144.0.0.0&term_type=1&jsVersion=4.2.2&terminal_type=1&lang=zh-cn&v=1176&lang=zh-cn"
@@ -280,6 +283,7 @@ def get_auth_info(timeout=3, interface=None):
                 return drcom_message_parser(response.read().decode('GB2312'))
             return None
     except Exception as e:
+        logger.debug(f"获取认证信息失败: {e}")
         return None
 
 
