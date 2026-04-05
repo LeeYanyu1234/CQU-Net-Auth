@@ -21,6 +21,16 @@ def get_local_ipv4_primary():
         return None
 
 
+def build_proxy_env_template(ip: str, port: int = 7890) -> str:
+    """Build shell proxy exports with the provided IP and port."""
+    return (
+        f"export http_proxy=http://{ip}:{port}\n"
+        f"export https_proxy=http://{ip}:{port}\n"
+        f"export all_proxy=socks5h://{ip}:{port}\n"
+        "export no_proxy=localhost,127.0.0.1,::1"
+    )
+
+
 def record_ip_to_file(file_path: str, *, uid: str | None = None, portal_ip: str | None = None):
     """Prepend one IP record and keep only the latest 10 non-empty lines."""
     logger = logging.getLogger()
