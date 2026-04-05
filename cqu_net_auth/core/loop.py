@@ -80,6 +80,7 @@ def run_loop(config: Config, portal_client: PortalClient | None = None, notifier
             logger.debug("portal.already_authenticated: %s", auth_info["uid"])
             status = "auth"
             portal_ip = auth_info.get("v46ip")
+            wrote_ip_record = False
 
             if portal_ip and last_portal_ip and portal_ip != last_portal_ip:
                 notifier.notify_portal_ip_changed(
@@ -89,11 +90,13 @@ def run_loop(config: Config, portal_client: PortalClient | None = None, notifier
                 if portal_ip != last_portal_ip:
                     record_ip_to_file(config.file_path, uid=auth_info.get(
                         "uid"), portal_ip=portal_ip)
+                    wrote_ip_record = True
                 last_portal_ip = portal_ip
 
             if (not startup_checked) and auth_info.get("uid") == config.account:
-                record_ip_to_file(config.file_path, uid=auth_info.get(
-                    "uid"), portal_ip=portal_ip)
+                if not wrote_ip_record:
+                    record_ip_to_file(config.file_path, uid=auth_info.get(
+                        "uid"), portal_ip=portal_ip)
                 startup_checked = True
             continue
 
@@ -130,5 +133,6 @@ def run_loop(config: Config, portal_client: PortalClient | None = None, notifier
             last_portal_ip = portal_ip
             record_ip_to_file(config.file_path,
                               uid=config.account, portal_ip=portal_ip)
+
 
 
