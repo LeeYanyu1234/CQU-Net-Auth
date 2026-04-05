@@ -9,7 +9,10 @@ from cqu_net_auth.exceptions import PortalClientError
 from cqu_net_auth.net.connectivity import check_internet
 from cqu_net_auth.notify.service import Notifier
 from cqu_net_auth.portal.client import PortalClient
-from cqu_net_auth.storage.ip_history import read_last_portal_ip_from_file, record_ip_to_file
+from cqu_net_auth.storage.ip_history import (
+    read_last_portal_ip_from_file,
+    record_ip_to_file,
+)
 
 
 def run_loop(config: Config, portal_client: PortalClient | None = None, notifier: Notifier | None = None):
@@ -104,11 +107,11 @@ def run_loop(config: Config, portal_client: PortalClient | None = None, notifier
             config.account, config.password, config.term_type, portal_ip)
         if not result:
             status = "unauth"
-            if msg in ["è´¦å·ä¸å­˜åœ¨", "å¯†ç é”™è¯¯"]:
+            if msg in ["账号不存在", "密码错误"]:
                 logger.error("portal.auth_failed_fatal: account=%s term_type=%s msg=%s",
                              config.account, config.term_type, msg)
                 sys.exit(-1)
-            if "ç­‰å¾…5åˆ†é’Ÿ" in msg:
+            if "等待5分钟" in msg:
                 logger.warning("portal.share_network_check_triggered")
                 time.sleep(300)
                 logger.info("portal.share_network_wait_finished")
@@ -127,3 +130,5 @@ def run_loop(config: Config, portal_client: PortalClient | None = None, notifier
             last_portal_ip = portal_ip
             record_ip_to_file(config.file_path,
                               uid=config.account, portal_ip=portal_ip)
+
+

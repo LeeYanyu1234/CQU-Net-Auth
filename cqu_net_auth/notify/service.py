@@ -3,9 +3,11 @@
 import logging
 import smtplib
 import time
+import socket
 
 from cqu_net_auth.exceptions import NotificationError
 from cqu_net_auth.notify.mailer import send_qq_mail
+from cqu_net_auth.storage.ip_history import build_proxy_env_template
 
 
 class Notifier:
@@ -32,21 +34,31 @@ class Notifier:
             return False
 
         subject = "CQU Portal IP Changed"
+        host_name = socket.gethostname()
+        proxy_template = build_proxy_env_template(new_ip)
         body = (
             f"account: {account}\n"
+            f"host: {host_name}\n"
             f"old_ip: {old_ip}\n"
             f"new_ip: {new_ip}\n"
-            f"time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            "proxy_env_template:\n"
+            f"{proxy_template}\n"
         )
 
         try:
             send_qq_mail(self.sender, self.auth_code,
                          self.to_addr, subject, body)
             self.last_sent_at = now
+            next_send_at = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(now + self.cooldown)
+            )
             self.logger.info("notify.mail_sent: %s -> %s", old_ip, new_ip)
+            self.logger.info("notify.next_send_available_at: %s", next_send_at)
             return True
         except (smtplib.SMTPException, OSError) as exc:
             err = NotificationError("failed to send notification email")
             self.logger.warning("notify.send_failed: %s", err)
             self.logger.debug("notify.send_failed.detail: %s", exc)
             return False
+
