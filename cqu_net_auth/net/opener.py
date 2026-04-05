@@ -131,7 +131,8 @@ def create_and_install_opener(interface=None, source_address=None):
             SourceInterfaceHandler(source_interface=interface)
         )
     elif source_address:
-        opener = urllib.request.build_opener(SourceAddressHandler((source_address, 0)))
+        opener = urllib.request.build_opener(
+            SourceAddressHandler((source_address, 0)))
     else:
         return
 

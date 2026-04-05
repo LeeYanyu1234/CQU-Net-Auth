@@ -20,6 +20,13 @@ def get_env_int(name: str, default: int) -> int:
         return default
 
 
+def parse_mail_recipients(raw_value: str) -> tuple[str, ...]:
+    """Parse recipient list from comma/semicolon separated input."""
+    normalized = raw_value.replace(";", ",")
+    recipients = [item.strip() for item in normalized.split(",")]
+    return tuple(item for item in recipients if item)
+
+
 def parse_args() -> Config:
     """Build and validate runtime configuration from CLI + env vars."""
     logger = logging.getLogger()
@@ -86,7 +93,8 @@ def parse_args() -> Config:
         logger.error("Windows does not support interface binding")
         sys.exit(-1)
 
-    if args.mail_enable and (not args.mail_sender or not args.mail_auth_code or not args.mail_to):
+    mail_recipients = parse_mail_recipients(args.mail_to)
+    if args.mail_enable and (not args.mail_sender or not args.mail_auth_code or not mail_recipients):
         logger.error(
             "mail_enable is set, but mail_sender/mail_auth_code/mail_to is missing")
         sys.exit(-1)
@@ -103,6 +111,6 @@ def parse_args() -> Config:
         mail_enable=args.mail_enable,
         mail_sender=args.mail_sender,
         mail_auth_code=args.mail_auth_code,
-        mail_to=args.mail_to,
+        mail_to=mail_recipients,
         mail_cooldown=args.mail_cooldown,
     )

@@ -24,7 +24,7 @@ def run_loop(config: Config, portal_client: PortalClient | None = None, notifier
         enabled=config.mail_enable,
         sender=config.mail_sender,
         auth_code=config.mail_auth_code,
-        to_addr=config.mail_to,
+        to_addrs=config.mail_to,
         cooldown=config.mail_cooldown,
     )
 
@@ -133,6 +133,3 @@ def run_loop(config: Config, portal_client: PortalClient | None = None, notifier
             last_portal_ip = portal_ip
             record_ip_to_file(config.file_path,
                               uid=config.account, portal_ip=portal_ip)
-
-
-
