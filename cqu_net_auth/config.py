@@ -1,6 +1,7 @@
 ﻿"""Configuration datamodel used by the runtime loop."""
 
 from dataclasses import dataclass
+from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -18,5 +19,5 @@ class Config:
     mail_enable: bool
     mail_sender: str
     mail_auth_code: str
-    mail_to: str
+    mail_to: Tuple[str, ...]
     mail_cooldown: int

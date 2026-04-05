@@ -15,7 +15,8 @@ def set_logger(log_level: str):
 
     if not logger.handlers:
         ch = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(message)s")
         ch.setFormatter(formatter)
         logger.addHandler(ch)
 

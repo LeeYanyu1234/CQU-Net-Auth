@@ -13,11 +13,11 @@ from cqu_net_auth.storage.ip_history import build_proxy_env_template
 class Notifier:
     """Send portal IP-change notifications with rate limiting."""
 
-    def __init__(self, enabled: bool, sender: str, auth_code: str, to_addr: str, cooldown: int):
+    def __init__(self, enabled: bool, sender: str, auth_code: str, to_addrs: tuple[str, ...], cooldown: int):
         self.enabled = enabled
         self.sender = sender
         self.auth_code = auth_code
-        self.to_addr = to_addr
+        self.to_addrs = to_addrs
         self.cooldown = cooldown
         self.last_sent_at = 0.0
         self.logger = logging.getLogger()
@@ -33,8 +33,8 @@ class Notifier:
                 "notify.skipped_cooldown: old=%s new=%s", old_ip, new_ip)
             return False
 
-        subject = "CQU Portal IP Changed"
         host_name = socket.gethostname()
+        subject = f"{host_name} Portal IP Changed"
         proxy_template = build_proxy_env_template(new_ip)
         body = (
             f"account: {account}\n"
@@ -48,17 +48,18 @@ class Notifier:
 
         try:
             send_qq_mail(self.sender, self.auth_code,
-                         self.to_addr, subject, body)
+                         self.to_addrs, subject, body)
             self.last_sent_at = now
             next_send_at = time.strftime(
                 "%Y-%m-%d %H:%M:%S", time.localtime(now + self.cooldown)
             )
             self.logger.info("notify.mail_sent: %s -> %s", old_ip, new_ip)
+            self.logger.info("notify.mail_recipients: %s",
+                             ", ".join(self.to_addrs))
             self.logger.info("notify.next_send_available_at: %s", next_send_at)
             return True
-        except (smtplib.SMTPException, OSError) as exc:
+        except (ValueError, smtplib.SMTPException, OSError) as exc:
             err = NotificationError("failed to send notification email")
             self.logger.warning("notify.send_failed: %s", err)
             self.logger.debug("notify.send_failed.detail: %s", exc)
             return False
-
