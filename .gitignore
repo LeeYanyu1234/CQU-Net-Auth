@@ -1,3 +1,5 @@
-/登录校园网脚本.bat
+﻿/登录校园网脚本.bat
 /.vscode/
-/__pycache__/
+__pycache__/
+**/__pycache__/
+*.pyc
