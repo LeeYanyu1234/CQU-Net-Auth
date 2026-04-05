@@ -1,10 +1,14 @@
-﻿import socket
+﻿"""urllib opener helpers for source binding (interface/source address)."""
+
+import socket
 import urllib.request
 import http.client
 import logging
 
 
 class IfaceHTTPConnection(http.client.HTTPConnection):
+    """HTTPConnection that can bind outbound sockets to a Linux interface."""
+
     def __init__(
         self,
         host,
@@ -71,6 +75,8 @@ class IfaceHTTPConnection(http.client.HTTPConnection):
 
 
 class SourceInterfaceHandler(urllib.request.HTTPHandler):
+    """HTTP handler that opens requests from a specific interface."""
+
     def __init__(self, source_interface=None):
         self.source_interface = source_interface
         super().__init__()
@@ -84,6 +90,8 @@ class SourceInterfaceHandler(urllib.request.HTTPHandler):
 
 
 class SourceAddressHandler(urllib.request.HTTPHandler):
+    """HTTP handler that opens requests from a specific source address."""
+
     def __init__(self, source_address=None):
         self.source_address = source_address
         super().__init__()
@@ -97,6 +105,7 @@ class SourceAddressHandler(urllib.request.HTTPHandler):
 
 
 def get_interface_ip(interface):
+    """Return IPv4 for a Linux interface name, or None on failure."""
     import fcntl
     import struct
 
@@ -116,6 +125,7 @@ def get_interface_ip(interface):
 
 
 def create_and_install_opener(interface=None, source_address=None):
+    """Install a global urllib opener bound to interface/source address."""
     if interface:
         opener = urllib.request.build_opener(
             SourceInterfaceHandler(source_interface=interface)

@@ -1,4 +1,6 @@
-﻿import logging
+﻿"""Network connectivity checks used by the loop."""
+
+import logging
 import socket
 import urllib.error
 import urllib.request
@@ -7,6 +9,7 @@ from .opener import create_and_install_opener, get_interface_ip
 
 
 def is_internet_connected(host="223.6.6.6", port=53, timeout=3, interface=None):
+    """Probe reachability via TCP connect (DNS endpoint by default)."""
     logger = logging.getLogger()
     interface_ip = None
     if interface:
@@ -28,6 +31,7 @@ def is_internet_connected(host="223.6.6.6", port=53, timeout=3, interface=None):
 
 
 def is_http_connected(url="https://www.baidu.com", timeout=3, interface=None):
+    """Probe reachability via HTTP HEAD request."""
     logger = logging.getLogger()
     create_and_install_opener(interface=interface)
     req = urllib.request.Request(url, method="HEAD")
@@ -40,6 +44,7 @@ def is_http_connected(url="https://www.baidu.com", timeout=3, interface=None):
 
 
 def check_internet(method="http", interface=None, **kwargs):
+    """Dispatch connectivity check method."""
     if method == "socket":
         return is_internet_connected(interface=interface, **kwargs)
     if method == "http":

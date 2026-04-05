@@ -1,7 +1,10 @@
-﻿import logging
+﻿"""Logging utilities for consistent console output."""
+
+import logging
 
 
 def set_logger(log_level: str):
+    """Configure root logger level/handlers and return the root logger."""
     if log_level and log_level.lower() == "debug":
         level = logging.DEBUG
     else:

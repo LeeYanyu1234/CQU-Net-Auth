@@ -1,8 +1,12 @@
-﻿from dataclasses import dataclass
+﻿"""Configuration datamodel used by the runtime loop."""
+
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class Config:
+    """Immutable runtime configuration parsed from CLI/environment."""
+
     account: str
     password: str
     term_type: str

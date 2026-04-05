@@ -1,4 +1,6 @@
-﻿import argparse
+﻿"""Command-line parsing and environment-backed configuration."""
+
+import argparse
 import logging
 import os
 import sys
@@ -8,6 +10,7 @@ from cqu_net_auth.logging_setup import set_logger
 
 
 def get_env_int(name: str, default: int) -> int:
+    """Read an integer from env; fall back to default when invalid."""
     value = os.getenv(name)
     if value is None or value == "":
         return default
@@ -18,10 +21,13 @@ def get_env_int(name: str, default: int) -> int:
 
 
 def parse_args() -> Config:
+    """Build and validate runtime configuration from CLI + env vars."""
     logger = logging.getLogger()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--account", type=str, default=os.getenv("ACCOUNT", ""))
-    parser.add_argument("--password", type=str, default=os.getenv("PASSWORD", ""))
+    parser.add_argument("--account", type=str,
+                        default=os.getenv("ACCOUNT", ""))
+    parser.add_argument("--password", type=str,
+                        default=os.getenv("PASSWORD", ""))
     parser.add_argument(
         "--term_type",
         type=str,
@@ -34,25 +40,35 @@ def parse_args() -> Config:
         default=os.getenv("LOG_LEVEL", "info"),
         choices=["debug", "info"],
     )
-    parser.add_argument("--interval", type=int, default=get_env_int("INTERVAL", 5))
+    parser.add_argument("--interval", type=int,
+                        default=get_env_int("INTERVAL", 5))
     parser.add_argument(
         "--check_with_http",
         action="store_true",
-        default=os.getenv("CHECK_WITH_HTTP", "False").lower() in ("true", "yes", "1", "t", "y"),
+        default=os.getenv("CHECK_WITH_HTTP", "False").lower() in (
+            "true", "yes", "1", "t", "y"),
     )
-    parser.add_argument("--http_url", type=str, default=os.getenv("HTTP_URL", "https://www.baidu.com"))
-    parser.add_argument("--interface", type=str, default=os.getenv("INTERFACE", ""))
-    parser.add_argument("--file_path", type=str, default=os.getenv("FILE_PATH", ""))
+    parser.add_argument("--http_url", type=str,
+                        default=os.getenv("HTTP_URL", "https://www.baidu.com"))
+    parser.add_argument("--interface", type=str,
+                        default=os.getenv("INTERFACE", ""))
+    parser.add_argument("--file_path", type=str,
+                        default=os.getenv("FILE_PATH", ""))
 
     parser.add_argument(
         "--mail_enable",
         action="store_true",
-        default=os.getenv("MAIL_ENABLE", "False").lower() in ("true", "yes", "1", "t", "y"),
+        default=os.getenv("MAIL_ENABLE", "False").lower() in (
+            "true", "yes", "1", "t", "y"),
     )
-    parser.add_argument("--mail_sender", type=str, default=os.getenv("MAIL_SENDER", ""))
-    parser.add_argument("--mail_auth_code", type=str, default=os.getenv("MAIL_AUTH_CODE", ""))
-    parser.add_argument("--mail_to", type=str, default=os.getenv("MAIL_TO", ""))
-    parser.add_argument("--mail_cooldown", type=int, default=get_env_int("MAIL_COOLDOWN", 300))
+    parser.add_argument("--mail_sender", type=str,
+                        default=os.getenv("MAIL_SENDER", ""))
+    parser.add_argument("--mail_auth_code", type=str,
+                        default=os.getenv("MAIL_AUTH_CODE", ""))
+    parser.add_argument("--mail_to", type=str,
+                        default=os.getenv("MAIL_TO", ""))
+    parser.add_argument("--mail_cooldown", type=int,
+                        default=get_env_int("MAIL_COOLDOWN", 300))
 
     args = parser.parse_args()
     set_logger(args.log_level)
@@ -71,7 +87,8 @@ def parse_args() -> Config:
         sys.exit(-1)
 
     if args.mail_enable and (not args.mail_sender or not args.mail_auth_code or not args.mail_to):
-        logger.error("mail_enable is set, but mail_sender/mail_auth_code/mail_to is missing")
+        logger.error(
+            "mail_enable is set, but mail_sender/mail_auth_code/mail_to is missing")
         sys.exit(-1)
 
     return Config(

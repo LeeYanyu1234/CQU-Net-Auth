@@ -1,4 +1,6 @@
-﻿import logging
+﻿"""Notification service with cooldown-based mail sending."""
+
+import logging
 import smtplib
 import time
 
@@ -7,6 +9,8 @@ from cqu_net_auth.notify.mailer import send_qq_mail
 
 
 class Notifier:
+    """Send portal IP-change notifications with rate limiting."""
+
     def __init__(self, enabled: bool, sender: str, auth_code: str, to_addr: str, cooldown: int):
         self.enabled = enabled
         self.sender = sender
@@ -17,12 +21,14 @@ class Notifier:
         self.logger = logging.getLogger()
 
     def notify_portal_ip_changed(self, account: str, old_ip: str, new_ip: str) -> bool:
+        """Send one notification when portal IP changes and cooldown allows it."""
         if not self.enabled:
             return False
 
         now = time.time()
         if now - self.last_sent_at < self.cooldown:
-            self.logger.debug("notify.skipped_cooldown: old=%s new=%s", old_ip, new_ip)
+            self.logger.debug(
+                "notify.skipped_cooldown: old=%s new=%s", old_ip, new_ip)
             return False
 
         subject = "CQU Portal IP Changed"
@@ -34,7 +40,8 @@ class Notifier:
         )
 
         try:
-            send_qq_mail(self.sender, self.auth_code, self.to_addr, subject, body)
+            send_qq_mail(self.sender, self.auth_code,
+                         self.to_addr, subject, body)
             self.last_sent_at = now
             self.logger.info("notify.mail_sent: %s -> %s", old_ip, new_ip)
             return True

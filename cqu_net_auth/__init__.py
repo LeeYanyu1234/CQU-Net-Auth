@@ -1,1 +1,1 @@
-﻿"""CQU Net Auth package."""
+﻿"""CQU Net Auth package root."""

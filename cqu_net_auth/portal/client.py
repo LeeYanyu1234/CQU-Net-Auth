@@ -1,4 +1,6 @@
-﻿import json
+﻿"""Portal API client and drcom response parsing."""
+
+import json
 import logging
 import re
 import socket
@@ -16,6 +18,7 @@ LOGOUT_URL = "http://login.cqu.edu.cn:801/eportal/portal/logout"
 
 
 def drcom_message_parser(drcom_message):
+    """Parse drXXXX(...) wrapper into dict; return None if malformed."""
     if isinstance(drcom_message, bytes):
         try:
             drcom_message = drcom_message.decode("GB2312")
@@ -34,12 +37,15 @@ def drcom_message_parser(drcom_message):
 
 
 class PortalClient:
+    """Lightweight client for CQU portal auth/status/logout endpoints."""
+
     def __init__(self, timeout=3, interface=None):
         self.timeout = timeout
         self.interface = interface
         self.logger = logging.getLogger()
 
     def get_auth_info(self):
+        """Return current portal auth info, or None when unavailable."""
         create_and_install_opener(interface=self.interface)
         req = urllib.request.Request(AUTH_INFO_URL)
         try:
@@ -52,14 +58,17 @@ class PortalClient:
             return None
 
     def login(self, account: str, password: str, term_type: str, ip: str):
+        """Attempt portal login and return (result, message)."""
         create_and_install_opener(interface=self.interface)
         auth_url = MOBILE_AUTH_URL if term_type == "mobile" else PC_AUTH_URL
-        req = urllib.request.Request(auth_url.format(account=account, password=password, ip=ip))
+        req = urllib.request.Request(auth_url.format(
+            account=account, password=password, ip=ip))
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as response:
                 if response.getcode() != 200:
                     return 0, "auth server error"
-                result = drcom_message_parser(response.read().decode("utf-8", errors="ignore"))
+                result = drcom_message_parser(
+                    response.read().decode("utf-8", errors="ignore"))
                 if result:
                     return result.get("result", 0), result.get("msg", "unknown error")
                 return 0, "unknown error"
@@ -68,6 +77,7 @@ class PortalClient:
             return 0, f"network error: {exc}"
 
     def old_logout(self):
+        """Fallback logout endpoint used when unbind says MAC not found."""
         create_and_install_opener(interface=self.interface)
         req = urllib.request.Request(LOGOUT_URL)
         try:
@@ -75,12 +85,13 @@ class PortalClient:
                 if response.getcode() != 200:
                     return False
                 body = response.read().decode("utf-8", errors="ignore")
-                return ("Radius" in body and "成功" in body) or ("success" in body.lower())
+                return ("Radius" in body and "æˆåŠŸ" in body) or ("success" in body.lower())
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             self.logger.debug("portal.old_logout_failed: %s", exc)
             return False
 
     def logout(self, account, ip):
+        """Logout by unbinding MAC; fallback to old logout endpoint."""
         create_and_install_opener(interface=self.interface)
         try:
             int_ip = int.from_bytes(socket.inet_aton(ip), "big")
@@ -93,14 +104,15 @@ class PortalClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as response:
                 if response.getcode() != 200:
                     return False
-                result = drcom_message_parser(response.read().decode("utf-8", errors="ignore"))
+                result = drcom_message_parser(
+                    response.read().decode("utf-8", errors="ignore"))
                 if not result:
                     return False
 
                 msg = result.get("msg", "")
-                if ("MAC" in msg and "成功" in msg) or ("success" in msg.lower()):
+                if ("MAC" in msg and "æˆåŠŸ" in msg) or ("success" in msg.lower()):
                     return True
-                if ("mac" in msg.lower() and "不存在" in msg) or ("not" in msg.lower() and "exist" in msg.lower()):
+                if ("mac" in msg.lower() and "ä¸å­˜åœ¨" in msg) or ("not" in msg.lower() and "exist" in msg.lower()):
                     return self.old_logout()
                 return False
         except (urllib.error.URLError, TimeoutError, OSError) as exc:

@@ -1,4 +1,7 @@
-﻿class CQUNetAuthError(Exception):
+﻿"""Project-scoped exception hierarchy."""
+
+
+class CQUNetAuthError(Exception):
     """Base exception for this project."""
 
 

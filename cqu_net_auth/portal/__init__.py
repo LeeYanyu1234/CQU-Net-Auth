@@ -1,1 +1,1 @@
-﻿"""Portal API package."""
+﻿"""Portal integration package."""

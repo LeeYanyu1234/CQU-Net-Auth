@@ -1,1 +1,1 @@
-﻿"""Network helpers package."""
+﻿"""Networking helpers package."""

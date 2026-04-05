@@ -1,4 +1,6 @@
-﻿import logging
+﻿"""Helpers for persisting recent IP observations."""
+
+import logging
 import os
 import re
 import socket
@@ -6,6 +8,7 @@ import time
 
 
 def get_local_ipv4_primary():
+    """Get primary outbound local IPv4 address, or None on failure."""
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.connect(("223.6.6.6", 53))
@@ -19,6 +22,7 @@ def get_local_ipv4_primary():
 
 
 def record_ip_to_file(file_path: str, *, uid: str | None = None, portal_ip: str | None = None):
+    """Prepend one IP record and keep only the latest 10 non-empty lines."""
     logger = logging.getLogger()
     if not file_path:
         return
@@ -51,6 +55,7 @@ def record_ip_to_file(file_path: str, *, uid: str | None = None, portal_ip: str 
 
 
 def read_last_portal_ip_from_file(file_path: str) -> str | None:
+    """Read the newest portal_ip value from record file."""
     logger = logging.getLogger()
     if not file_path:
         return None

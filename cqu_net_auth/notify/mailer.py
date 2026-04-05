@@ -1,9 +1,12 @@
-﻿import smtplib
+﻿"""SMTP helpers for outbound notification email."""
+
+import smtplib
 from email.header import Header
 from email.mime.text import MIMEText
 
 
 def send_qq_mail(sender, auth_code, to_addr, subject, body, smtp_host="smtp.qq.com", smtp_port=465, timeout=10):
+    """Send a plain-text email through QQ SMTP over SSL."""
     msg = MIMEText(body, "plain", "utf-8")
     msg["From"] = sender
     msg["To"] = to_addr
