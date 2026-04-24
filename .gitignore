@@ -3,3 +3,6 @@
 __pycache__/
 **/__pycache__/
 *.pyc
+ip.txt
+.codex
+start_cqu_net_auth.sh
