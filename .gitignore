@@ -6,3 +6,4 @@ __pycache__/
 ip.txt
 .codex
 start_cqu_net_auth.sh
+logs/

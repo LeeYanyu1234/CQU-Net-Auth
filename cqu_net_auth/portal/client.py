@@ -85,36 +85,54 @@ class PortalClient:
                 if response.getcode() != 200:
                     return False
                 body = response.read().decode("utf-8", errors="ignore")
-                return ("Radius" in body and "æˆåŠŸ" in body) or ("success" in body.lower())
+                return ("Radius注销成功！" in body) or ("success" in body.lower())
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             self.logger.debug("portal.old_logout_failed: %s", exc)
             return False
 
-    def logout(self, account, ip):
-        """Logout by unbinding MAC; fallback to old logout endpoint."""
+    def unbind(self, account: str, int_ip: int):
+        """Call unbind endpoint and return parsed drcom payload."""
         create_and_install_opener(interface=self.interface)
-        try:
-            int_ip = int.from_bytes(socket.inet_aton(ip), "big")
-        except OSError as exc:
-            raise PortalClientError(f"invalid ip for logout: {ip}") from exc
-
         url = UNBIND_URL.format(account=account, int_ip=int_ip)
         req = urllib.request.Request(url)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as response:
                 if response.getcode() != 200:
-                    return False
-                result = drcom_message_parser(
-                    response.read().decode("utf-8", errors="ignore"))
-                if not result:
-                    return False
-
-                msg = result.get("msg", "")
-                if ("MAC" in msg and "æˆåŠŸ" in msg) or ("success" in msg.lower()):
-                    return True
-                if ("mac" in msg.lower() and "ä¸å­˜åœ¨" in msg) or ("not" in msg.lower() and "exist" in msg.lower()):
-                    return self.old_logout()
-                return False
+                    return None
+                return drcom_message_parser(response.read().decode("utf-8", errors="ignore"))
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            self.logger.debug("portal.logout_failed: %s", exc)
+            self.logger.debug("portal.unbind_failed: %s", exc)
+            return None
+
+    def logout(self, account, ip):
+        """Logout using auth-info->unbind flow; fallback to old logout when MAC is missing."""
+        auth_info = self.get_auth_info()
+        if not auth_info:
+            self.logger.debug("portal.logout_failed: missing_auth_info")
             return False
+        if "uid" not in auth_info:
+            self.logger.debug("portal.logout_skipped: unauthenticated")
+            return False
+
+        real_ip = auth_info.get("v46ip") or ip
+        if not real_ip:
+            self.logger.debug("portal.logout_failed: missing_v46ip")
+            return False
+
+        try:
+            int_ip = int.from_bytes(socket.inet_aton(real_ip), "big")
+        except OSError as exc:
+            raise PortalClientError(
+                f"invalid ip for logout: {real_ip}") from exc
+
+        real_account = auth_info.get("uid") or account
+        unbind_result = self.unbind(real_account, int_ip)
+        if unbind_result:
+            msg = unbind_result.get("msg", "")
+            if "解绑终端MAC成功" in msg:
+                return True
+            if "mac不存在" in msg or "mac不存在" in msg.lower():
+                return self.old_logout()
+
+        # Keep behavior aligned with the reference flow: treat non-matching unbind as success.
+        return True

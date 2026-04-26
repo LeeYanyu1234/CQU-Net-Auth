@@ -124,16 +124,16 @@ def get_interface_ip(interface):
         return None
 
 
-def create_and_install_opener(interface=None, source_address=None):
-    """Install a global urllib opener bound to interface/source address."""
-    if interface:
-        opener = urllib.request.build_opener(
-            SourceInterfaceHandler(source_interface=interface)
-        )
-    elif source_address:
-        opener = urllib.request.build_opener(
-            SourceAddressHandler((source_address, 0)))
-    else:
-        return
+def create_and_install_opener(interface=None, source_address=None, disable_proxy=True):
+    """Install a global urllib opener with optional source binding and proxy bypass."""
+    handlers = []
+    if disable_proxy:
+        handlers.append(urllib.request.ProxyHandler({}))
 
+    if interface:
+        handlers.append(SourceInterfaceHandler(source_interface=interface))
+    elif source_address:
+        handlers.append(SourceAddressHandler((source_address, 0)))
+
+    opener = urllib.request.build_opener(*handlers)
     urllib.request.install_opener(opener)

@@ -7,6 +7,7 @@ import time
 from cqu_net_auth.config import Config
 from cqu_net_auth.exceptions import PortalClientError
 from cqu_net_auth.net.connectivity import check_internet
+from cqu_net_auth.net.opener import create_and_install_opener
 from cqu_net_auth.notify.service import Notifier
 from cqu_net_auth.portal.client import PortalClient
 from cqu_net_auth.storage.ip_history import (
@@ -45,6 +46,60 @@ def run_loop(config: Config, portal_client: PortalClient | None = None, notifier
     last_portal_ip = read_last_portal_ip_from_file(config.file_path)
     if last_portal_ip:
         logger.info("storage.last_portal_ip_loaded: %s", last_portal_ip)
+
+    # First-start sequence: enforce no-proxy mode, then logout and login once.
+    create_and_install_opener(interface=config.interface, disable_proxy=True)
+    logger.info("startup.reauth_begin")
+
+    startup_auth_info = portal_client.get_auth_info()
+    if startup_auth_info and "uid" in startup_auth_info:
+        startup_uid = startup_auth_info.get("uid")
+        startup_ip = startup_auth_info.get("v46ip")
+        if startup_uid and startup_ip:
+            try:
+                if portal_client.logout(startup_uid, startup_ip):
+                    logger.info("startup.logout_success: %s", startup_uid)
+                else:
+                    logger.warning("startup.logout_failed: %s", startup_uid)
+            except PortalClientError as exc:
+                logger.warning("startup.logout_failed_invalid_input: %s", exc)
+        else:
+            logger.warning("startup.logout_skipped_missing_v46ip")
+
+    startup_auth_info = portal_client.get_auth_info()
+    startup_portal_ip = startup_auth_info.get(
+        "v46ip") if startup_auth_info else None
+    if startup_portal_ip:
+        result, msg = portal_client.login(
+            config.account, config.password, config.term_type, startup_portal_ip
+        )
+        if result:
+            status = "auth"
+            logger.info("startup.login_success: account=%s term_type=%s",
+                        config.account, config.term_type)
+            if startup_portal_ip and last_portal_ip and startup_portal_ip != last_portal_ip:
+                notifier.notify_portal_ip_changed(
+                    config.account, last_portal_ip, startup_portal_ip
+                )
+            last_portal_ip = startup_portal_ip
+            record_ip_to_file(config.file_path,
+                              uid=config.account, portal_ip=startup_portal_ip)
+            startup_checked = True
+        else:
+            status = "unauth"
+            if msg in ["账号不存在", "密码错误"]:
+                logger.error("portal.auth_failed_fatal: account=%s term_type=%s msg=%s",
+                             config.account, config.term_type, msg)
+                sys.exit(-1)
+            if "等待5分钟" in msg:
+                logger.warning("portal.share_network_check_triggered")
+                time.sleep(300)
+                logger.info("portal.share_network_wait_finished")
+            else:
+                logger.warning("startup.login_failed_retry: account=%s term_type=%s msg=%s",
+                               config.account, config.term_type, msg)
+    else:
+        logger.warning("startup.login_skipped_missing_v46ip")
 
     while True:
         # Fast path: when authenticated and network is healthy, only sleep/recheck.
